@@ -18,7 +18,7 @@ def seed():
  repo.init_db()
  for role,name in [('admin','议题复核研究员'),('analyst','语料分析员'),('viewer','研究观察员')]:
   email=f'{role}@liwen.test';repo.put('users',{'id':email,'email':email,'name':name,'role':role,'password_hash':hash_password('Topic2026!')},insert_only=True)
- rows=demo_rows();repo.put('datasets',{'id':'ds-interview','name':'11月匿名访谈 · 480篇','source':'interview_corpus_202611.csv','rows':rows,'created_at':now()},insert_only=True)
+ rows=demo_rows();repo.put('datasets',{'id':'ds-interview','name':'11月匿名访谈 · 480篇','source':'interview_corpus_202611.csv','rows':rows,'created_at':now(),'family_id':'ds-interview','version_seq':1,'parent_version_id':'','revision_batch_id':''},insert_only=True)
  lexicon={'id':'lexicon-v1','name':'访谈受控词表与停用词','version':'2026.11-v1','terms':[x for p in POOLS for x in p]+STOP,'stopwords':STOP,'created_at':now()};repo.put('lexicons',lexicon,insert_only=True)
  study={'id':'study-themes','name':'访谈线索六主题分解','dataset_id':'ds-interview','lexicon_id':'lexicon-v1','topic_count':6,'max_iter':250,'tolerance':.00001,'seed':2305,'created_at':now()};repo.put('studies',study,insert_only=True)
  repo.put('runs',{'id':'run-demo','study_id':'study-themes','status':'completed','result':analyze(rows,lexicon,study),'error':'','created_at':now()},insert_only=True)

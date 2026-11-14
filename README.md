@@ -6,7 +6,7 @@
 
 上游 `interview_corpus_202611.csv` 含480篇模拟匿名文本。团队原先手工贴标签，高频空词干扰、同议题措辞分散、主题名称没有版本。本工程替代语料核查、受控词典、向量化、主题分解与命名复核，下游研究员据此逐篇核查。无外部LLM、分词API或模型下载，不把主题当语义分类真值。
 
-六实体：CorpusDataset语料、TermLexicon词典版本、TopicStudy方案、TopicRun运行、ThemeReview人工命名复核、Report报告。六页：议题索引、匿名语料、词典版本、分解方案、主题与近邻、人工命名。ThemeIndex和ModelSummary在总览/结果共用。
+七实体：CorpusDataset语料（版本族，修订只追加新版本）、RevisionBatch修订批、TermLexicon词典版本、TopicStudy方案、TopicRun运行、ThemeReview人工命名复核、Report报告。六页：议题索引、匿名语料（含批量修订入口与版本链/批号台账）、词典版本、分解方案、主题与近邻、人工命名。ThemeIndex和ModelSummary在总览/结果共用。
 
 ## 快速启动
 
@@ -36,6 +36,16 @@ docker compose exec -T backend python -m scripts.seed_demo
 6. 09:25 查看主题词、473篇有效文档的权重及7篇隔离文档；检查真实重建误差和变化阈值标记。
 7. 09:30 结合实际核查范围，为T01…逐行填写人工名称及依据；名称保存在独立复核记录，不覆盖模型结果。
 8. 09:40 管理员批准后生成报告，观察员下载含人工名称、原始权重与近邻的CSV。
+
+## 批量修订合并口径
+
+多人可同时领走同一语料版本各自清理，通过 `POST /revisions` 按批合并，避免整份重导互相覆盖。请求含 `batch_id`（批号自然键）、`dataset_id`、领走版本 `base_version_id` 与 `operations`（每篇至多一条，op 为 `add`/`correct`/`remove`）。
+
+合并是基于 领走版本base → 当前最新版head → 批后theirs 的三方合并：不同文档的并发改动自动并入；同一文档双方都改且结果不同、对不存在于领走版的文档做更正/移除、新增编号已被他批以不同内容占用等情况记为冲突，整批不发布、不产生新版本，冲突逐条返回 doc_id 与原因。领走后文档已被移除，晚到的旧更正同样判冲突而不是静默覆盖；他批已做出相同结果时按无变化收敛，不重复计改。每批最多1000条，合并后仍须满足2—600篇、单篇1—2000字。
+
+批号为自然键：同批号同内容（操作顺序无关，按 doc_id 规范化后取SHA-256）重复投递不新增版本，`created=false` 并原样返回首次结果；同批号不同内容一律 409 拒绝。批次状态为 `published`/`conflict`/`rejected`，全部落 `revision_batches` 台账可按 `GET /revisions` 与 `GET /revisions/{batch_id}` 追溯。写路径在 Postgres 用事务级 advisory lock、SQLite 用 `BEGIN IMMEDIATE` 串行化，批号 insert-only，配合自然键保证并发下恰好一次发布；失败批次可用新批号基于当前最新版重新提交。
+
+成功发布只在版本族内追加新语料版本（`family_id` 相同、`version_seq` 递增、记录 `parent_version_id` 与来源批号），领走版本原样保留；已有 TopicStudy 仍引用其原版本，TopicRun 结果与 ThemeReview 人工命名不受影响，新研究可显式选择新版本重新分解。`GET /datasets/{family_id}/versions` 返回完整版本链，语料列表每族只显示最新版。
 
 ## 分词与TF–IDF口径
 
@@ -77,7 +87,7 @@ Seed2305生成480篇、六种模拟议题来源、35词/5停用词，7篇故意�
 
 ## 边界
 
-受控词典会遗漏未登记措辞，近邻与NMF只提供描述线索，不能证明语义分类、因果或群体结论。不同词典/样本改变TF–IDF与误差，不宜直接横比。NMF因子顺序/尺度不唯一，固定seed只保证本实现复现。Redis出队后强杀无自动重投，需要重提；JSON载荷无多人乐观锁或迁移回滚。默认账号仅本地演示。
+受控词典会遗漏未登记措辞，近邻与NMF只提供描述线索，不能证明语义分类、因果或群体结论。不同词典/样本改变TF–IDF与误差，不宜直接横比。NMF因子顺序/尺度不唯一，固定seed只保证本实现复现。Redis出队后强杀无自动重投，需要重提；语料修订通过批号幂等与三方合并支持多人并发，但通用JSON载荷仍无跨实体迁移回滚。默认账号仅本地演示。
 
 真实容器、HTTP、手算oracle、浏览器人工命名流程与截图在批次test-artifacts/gb-2305，源码不含测试截图/日志/报告。
 

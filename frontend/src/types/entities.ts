@@ -1,5 +1,5 @@
 export type User={email:string;name:string;role:string};
-export type Dataset={id:string;name:string;source:string;row_count:number;characters:number};
+export type Dataset={id:string;name:string;source:string;row_count:number;characters:number;family_id:string;version_seq:number;parent_version_id:string;revision_batch_id:string};
 export type Lexicon={id:string;name:string;version:string;terms:string[];stopwords:string[]};
 export type Study={id:string;name:string;dataset_id:string;lexicon_id:string;topic_count:number;max_iter:number;tolerance:number;seed:number};
 export type Topic={id:string;top_terms:{term:string;weight:number;display_fraction:number}[]};

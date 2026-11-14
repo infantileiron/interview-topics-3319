@@ -7,6 +7,30 @@ class CorpusDataset:
  source:str
  rows:list[dict]
  created_at:str=''
+ family_id:str=''
+ version_seq:int=1
+ parent_version_id:str=''
+ revision_batch_id:str=''
+ def __post_init__(self):
+  if not self.family_id:self.family_id=self.id
+@dataclass
+class RevisionBatch:
+ id:str
+ family_id:str
+ base_version_id:str
+ base_version_seq:int
+ operations:list[dict]
+ content_hash:str
+ status:str
+ submitted_by:str=''
+ head_version_id:str=''
+ head_version_seq:int=0
+ new_version_id:str=''
+ conflicts:list[dict]=field(default_factory=list)
+ summary:dict=field(default_factory=dict)
+ error:str=''
+ created_at:str=''
+ resolved_at:str=''
 @dataclass
 class TermLexicon:
  id:str

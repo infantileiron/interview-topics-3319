@@ -11,6 +11,15 @@ class DatasetInput(InputModel):
  csv_text:str=Field(min_length=20,max_length=1800000)
 class RenameDataset(InputModel):
  name:str=Field(min_length=2,max_length=100)
+class RevisionOp(InputModel):
+ op:Literal['add','correct','remove']
+ doc_id:str=Field(min_length=1,max_length=100)
+ text:str=Field(default='',max_length=2000)
+class RevisionBatchInput(InputModel):
+ batch_id:str=Field(min_length=3,max_length=80)
+ dataset_id:str=Field(min_length=1,max_length=100)
+ base_version_id:str=Field(min_length=1,max_length=100)
+ operations:list[RevisionOp]=Field(min_length=1,max_length=1000)
 class LexiconInput(InputModel):
  name:str=Field(min_length=2,max_length=100)
  version:str=Field(default='v1',min_length=1,max_length=40)

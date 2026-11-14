@@ -5,7 +5,7 @@ from src.config.settings import SEED_DEMO
 from src.utils import repository as repo
 from src.middlewares.audit import AuditMiddleware
 from src.middlewares.errors import ErrorMiddleware
-from src.routes import auth,dataset,study,run,review,report,audit,lexicon
+from src.routes import auth,dataset,study,run,review,report,audit,lexicon,revision
 @asynccontextmanager
 async def lifespan(app):
     repo.init_db()
@@ -18,7 +18,8 @@ async def lifespan(app):
 app=FastAPI(title="栎文研究 · 访谈议题分解",lifespan=lifespan)
 app.add_middleware(AuditMiddleware)
 app.add_middleware(ErrorMiddleware)
-for module in (auth,dataset,study,run,review,report,audit,lexicon): app.include_router(module.router)
+for module in (auth,dataset,study,run,review,report,audit,lexicon,revision): app.include_router(module.router)
+app.include_router(revision.versions_router)
 @app.get("/health")
 def health():
     repo.all_rows("users")

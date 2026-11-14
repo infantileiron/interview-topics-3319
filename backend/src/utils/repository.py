@@ -1,11 +1,13 @@
 import json, sqlite3, threading
+from contextlib import contextmanager
 from dataclasses import asdict
 from fastapi import HTTPException
 from src.config.settings import DATABASE_URL
-TABLES = ("datasets", "lexicons", "studies", "runs", "reviews", "reports", "users", "audit")
+TABLES = ("datasets", "lexicons", "studies", "runs", "reviews", "reports", "users", "audit", "revision_batches")
 _LOCK = threading.RLock()
+def is_sqlite(): return DATABASE_URL.startswith("sqlite:///")
 def connect():
-    if DATABASE_URL.startswith("sqlite:///"):
+    if is_sqlite():
         conn = sqlite3.connect(DATABASE_URL.removeprefix("sqlite:///"), timeout=30)
         return conn, "?"
     import psycopg
@@ -13,7 +15,7 @@ def connect():
 def init_db():
     conn,_ = connect()
     try:
-        if not DATABASE_URL.startswith("sqlite:///"):
+        if not is_sqlite():
             conn.execute("SELECT pg_advisory_xact_lock(2305)")
         for table in TABLES:
             conn.execute(f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
@@ -43,3 +45,46 @@ def put(table, item, insert_only=False):
             conn.commit()
         return item
     finally: conn.close()
+@contextmanager
+def transaction():
+    """串行化写事务：Postgres 用事务级 advisory lock，SQLite 用 BEGIN IMMEDIATE。
+
+    事务内通过 tx_all/tx_get/tx_put 访问同一连接，提交或回滚一致，避免整批
+    修订只落一半。连接关闭即释放锁。
+    """
+    conn,q = connect()
+    try:
+        with _LOCK:
+            if is_sqlite():
+                conn.execute("BEGIN IMMEDIATE")
+            else:
+                conn.execute("BEGIN")
+                conn.execute("SELECT pg_advisory_xact_lock(23051114)")
+            yield _Tx(conn, q)
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+class _Tx:
+    def __init__(self, conn, q): self.conn, self.q = conn, q
+    def all(self, table):
+        assert table in TABLES
+        return [json.loads(r[0]) for r in self.conn.execute(f"SELECT payload FROM {table} ORDER BY id").fetchall()]
+    def get(self, table, id):
+        assert table in TABLES
+        row = self.conn.execute(f"SELECT payload FROM {table} WHERE id={self.q}", (id,)).fetchone()
+        if row is None: raise HTTPException(404, "记录不存在")
+        return json.loads(row[0])
+    def find(self, table, id):
+        assert table in TABLES
+        row = self.conn.execute(f"SELECT payload FROM {table} WHERE id={self.q}", (id,)).fetchone()
+        return json.loads(row[0]) if row else None
+    def put(self, table, item, insert_only=False):
+        assert table in TABLES
+        if not isinstance(item, dict): item = asdict(item)
+        clause = "DO NOTHING" if insert_only else "DO UPDATE SET payload=excluded.payload"
+        self.conn.execute(f"INSERT INTO {table} (id,payload) VALUES ({self.q},{self.q}) ON CONFLICT(id) {clause}",
+                          (item["id"], json.dumps(item, ensure_ascii=False, allow_nan=False)))
+        return item
